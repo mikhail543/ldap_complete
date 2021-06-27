@@ -1,0 +1,9 @@
+---
+- name: testing purposes 
+  become: yes 
+  hosts: ldap 
+  tasks:
+    - name: install packages
+      yum: 
+        name: man, mlocate 
+        state: latest 

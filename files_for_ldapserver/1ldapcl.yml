@@ -1,0 +1,79 @@
+---
+- name: Installing ldap clients 
+  hosts: 192.168.37.87
+  become: yes 
+  tasks: 
+    - name: installing packages 
+      yum: 
+        name:  wget,  autofs, nfs-utils, openldap-clients, nss-pam-ldapd, authconfig
+        state:  latest 
+    - name: disabling firewalld
+      service:
+        name: firewalld
+        state: stopped  
+        enabled: False  
+    - name: Create directory for certificate from Master Ldap
+      ansible.builtin.file: 
+        path: /etc/openldap/cacerts
+        state: directory
+        mode: '0775'
+    - name: Downloading certificate from Ldap server
+      get_url:
+        url: http://192.168.37.25/CA.crt
+        dest: /etc/openldap/cacerts/ 
+    - name: Changing configuration for Ldap client with command authconfig
+      ansible.builtin.shell: authconfig --enableldapauth --enableldap --ldapserver=192.168.37.25 --ldapbasedn="dc=ziyotek3,dc=local"  --update
+    - name: Copying configuration files for Autofs 
+      template: 
+        src: /home/ansible/ldapplaybooks/files_for_ldapserver/auto.master.j2
+        dest: /etc/auto.master
+    - name: Copying second config file 
+      template:
+        src:  /home/ansible/ldapplaybooks/files_for_ldapserver/auto.user.j2
+        dest: /etc/auto.user 
+    - name: Turn on Autofs and restart it 
+      service: 
+        name: autofs
+        enabled: yes 
+        state: restarted 
+         
+
+        # This part will take place only if Os centos 8 
+    - block:
+      - name: installation additional packages for Centos 8
+        yum: 
+          name: sssd, openssl-perl
+          state: latest
+      - name: Copying config file for Centos8
+        template:
+          src: /home/ansible/ldapplaybooks/files_for_ldapserver/sssd.conf.j2
+          dest: /etc/sssd/sssd.conf
+      - name: Copying config file for Centos8
+        template:
+          src: /home/ansible/ldapplaybooks/files_for_ldapserver/ldap.conf.j2
+          dest: /etc/openldap/ldap.conf
+      - name: Applying changes
+        command: authselect select sssd
+      - name: Applying changes
+        service:
+          name: oddjobd.service
+          enabled: yes
+          state: started 
+      - name: Changing permissions 
+        command: chmod 600 /etc/sssd/sssd.conf
+      - name: Restarting sssd service
+        service:
+          name: sssd
+          enabled: yes
+          state: restarted 
+      - name: Verifying existing user
+        shell: id roman
+        register: user
+      - name: Printing output
+        debug:
+          var: user
+      when: ansible_distribution_major_version == "8" 
+    
+
+     
+        
